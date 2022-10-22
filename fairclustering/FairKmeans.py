@@ -105,6 +105,9 @@ class FairKmeans:
         self.fit(X, bias_vector)
         return self.labels_
 
+    def fit_predict(self, X, bias_vector):
+        return self.fit_transform(X, bias_vector)
+
     def fair_clustering_train(self, X, rows_dimensions):
         old_fair_clustering_energy = None
         for _ in range(self.max_iters):
