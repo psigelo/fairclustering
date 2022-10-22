@@ -27,6 +27,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url='https://github.com/psigelo/fairclustering',
     license='MIT',
-    packages=['kmeans'],
+    packages=['fairclustering', 'fairclustering.kmeans'],
     install_requires=get_install_requires(),
 )
