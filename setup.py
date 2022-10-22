@@ -19,7 +19,7 @@ def get_install_requires() -> List[str]:
 
 setuptools.setup(
     name='fairclustering',
-    version='0.0.2',
+    version='0.0.3',
     author='Pascal Sigel',
     author_email='pascal.sigel@gmail.com',
     description='Fair clustering toolbox for python',
@@ -27,6 +27,6 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url='https://github.com/psigelo/fairclustering',
     license='MIT',
-    packages=['fairclustering', 'fairclustering.kmeans'],
+    packages=['fairclustering'],
     install_requires=get_install_requires(),
 )
