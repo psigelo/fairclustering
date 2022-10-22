@@ -19,7 +19,7 @@ def get_install_requires() -> List[str]:
 
 setuptools.setup(
     name='fairclustering',
-    version='0.0.4',
+    version='0.0.5',
     author='Pascal Sigel',
     author_email='pascal.sigel@gmail.com',
     description='Fair clustering toolbox for python',

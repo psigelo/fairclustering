@@ -60,7 +60,7 @@ def fairness_term_V_j(u_j, S, V_j):
 
 
 class FairKmeans:
-    def __init__(self, fair_lambda, lipchitz_value=2.0, oldE=1e100, max_iters=100, bound_iterations=10000):
+    def __init__(self, fair_lambda, clusters_amount, lipchitz_value=2.0, oldE=1e100, max_iters=100, bound_iterations=10000):
         self.fair_lambda = fair_lambda
         self.labels_ = None
         self.dataset_balance = None
@@ -73,6 +73,7 @@ class FairKmeans:
         self.bound_iterations = bound_iterations
         self.lipchitz_value = lipchitz_value
         self.fairness_errors = []
+        self.clusters_amount = clusters_amount
 
         # TODO: check meaning of next variables
         self.S = []
@@ -82,8 +83,7 @@ class FairKmeans:
         self.E_cluster_discrete = []
         # TODO END
 
-    def fit(self, X, bias_vector, clusters_amount):
-        self.clusters_amount = clusters_amount
+    def fit(self, X, bias_vector):
         rows_amount, _ = X.shape
         self.V_list = [np.array(bias_vector == j) for j in np.unique(bias_vector)]
         V_sum = [x.sum() for x in self.V_list]
@@ -92,11 +92,11 @@ class FairKmeans:
         self.proportion_bias_variable = [x / rows_amount for x in V_sum]
         # initial values
         # ==============
-        self.cluster_centers_ = KMeans(n_clusters=clusters_amount)._init_centroids(X=X,
-                                                                                   x_squared_norms=None,
-                                                                                   random_state=np.random.RandomState(),
-                                                                                   n_centroids=clusters_amount,
-                                                                                   init='k-means++')
+        self.cluster_centers_ = KMeans(n_clusters=self.clusters_amount)._init_centroids(X=X,
+                                                                                        x_squared_norms=None,
+                                                                                        random_state=np.random.RandomState(),
+                                                                                        n_centroids=self.clusters_amount,
+                                                                                        init='k-means++')
         self.labels_ = euclidean_distances(X, self.cluster_centers_).argmin(axis=1)
         # ==============
         self.fair_clustering_train(X, rows_amount)
