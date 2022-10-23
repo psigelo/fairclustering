@@ -111,32 +111,47 @@ class FairKmeans:
 
     def fair_clustering_train(self, X, rows_dimensions):
         old_fair_clustering_energy = None
-        for _ in range(self.max_iters):
-            tmp_list = [np.where(self.labels_ == k)[0] for k in range(self.clusters_amount)]
-            self.cluster_centers_ = [X[tmp, :].mean(axis=0) for tmp in tmp_list]  # updating cluster centers
-            centers_stacked = np.asarray(np.vstack(self.cluster_centers_))
-            square_distances = euclidean_distances(X, centers_stacked, squared=True)
-            a_p = square_distances.copy()
 
-            labels, S, bound_E = self.bound_update(a_p)
+        for it in range(self.max_iter):
+            if it == 0:
+                centers_stacked = self.cluster_centers_
+                square_distances = euclidean_distances(X, self.cluster_centers_, squared=True)  # TODO check if stacked is needed
+                a_p = square_distances.copy()
+            else:
+                tmp_list = [np.where(self.labels_ == k)[0] for k in range(self.n_clusters)]
+                self.cluster_centers_ = [X[tmp, :].mean(axis=0) for tmp in tmp_list]  # updating cluster centers
+                centers_stacked = np.asarray(np.vstack(self.cluster_centers_))
+                square_distances = euclidean_distances(X, centers_stacked, squared=True)
+                a_p = square_distances.copy()
 
-            self.fairness_errors.append(
-                get_fair_accuracy_proportional(self.proportion_bias_variable, self.V_list, labels, rows_dimensions, self.clusters_amount)
-            )
+            l_check = a_p.argmin(axis=1)
+            if len(np.unique(l_check)) != self.n_clusters:
+                print("ERROR: is not implemented yet!")
+                exit(-1)
 
-            current_clustering_energy, clusterE, fairE, clusterE_discrete = self.compute_energy_fair_clustering(X, centers_stacked, labels, S)
+            self.labels_, S, bound_E = self.bound_update(a_p)
+            fairness_error = get_fair_accuracy_proportional(self.proportion_bias_variable, self.V_list, self.labels_, rows_dimensions, self.n_clusters)
+            self.fairness_errors.append(fairness_error)
+
+            current_clustering_energy, clusterE, fairE, clusterE_discrete = self.compute_energy_fair_clustering(X, centers_stacked, self.labels_, S)
             self.E_org.append(current_clustering_energy)
             self.E_cluster.append(clusterE)
             self.E_fair.append(fairE)
             self.E_cluster_discrete.append(clusterE_discrete)
+
+            if (len(np.unique(self.labels_)) != self.n_clusters) or math.isnan(fairness_error):
+                print("Try a smaller lambda!!")  # TODO Raise an exception
+                exit(-1)
 
             if old_fair_clustering_energy is not None:
                 if abs(current_clustering_energy - old_fair_clustering_energy) <= 1e-4 * abs(old_fair_clustering_energy):
                     print('......Job  done......')
                     break
             old_fair_clustering_energy = current_clustering_energy
+        else:
+            print("max iters passed, not converged to a final answer")
 
-    def bound_update(self, a_p):
+    def bound_update(self, a_p): # TODO: check why a_p is so diff with paper one
         old_bound_energy = float('inf')
         J = len(self.proportion_bias_variable)
         S = normalize_2(np.exp((-a_p)))
