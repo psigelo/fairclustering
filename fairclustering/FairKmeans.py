@@ -62,8 +62,9 @@ def fairness_term_V_j(u_j, S, V_j):
 
 
 class FairKmeans:
-    def __init__(self, fair_lambda, n_clusters, n_init=25, lipchitz_value=2.0, max_iter=100, bound_iterations=10000):
-        self.fair_lambda = fair_lambda
+    def __init__(self, n_clusters, n_init=25, fair_lambda_powers=None, lipchitz_value=2.0, max_iter=100, bound_iterations=10000):
+
+        self.fair_lambda_powers = fair_lambda_powers if fair_lambda_powers is not None else [10, 50, 100, 200]
         self.labels_ = None
         self.dataset_balance = None
         self.proportion_bias_variable = None  # U_v
@@ -72,35 +73,32 @@ class FairKmeans:
         self.max_iter = max_iter
         self.bound_iterations = bound_iterations
         self.lipchitz_value = lipchitz_value
-        self.fairness_errors = []
         self.n_clusters = n_clusters
         self.n_init = n_init
+        self.collection_of_fairness_errors = []
 
-        # TODO: check meaning of next variables
-        self.S = []
-        self.E_org = []
-        self.E_cluster = []
-        self.E_fair = []
-        self.E_cluster_discrete = []
-        # TODO END
-
-    def fit(self, X, bias_vector):
-        rows_amount, _ = X.shape
-        self.V_list = [np.array(bias_vector == j) for j in np.unique(bias_vector)]
-        V_sum = [x.sum() for x in self.V_list]
-
-        self.dataset_balance = min(V_sum) / max(V_sum)
-        self.proportion_bias_variable = [x / rows_amount for x in V_sum]
-        # initial values
-        # ==============
+    def reset_centers(self, X):
         self.cluster_centers_ = KMeans(n_clusters=self.n_clusters)._init_centroids(X=X,
                                                                                    x_squared_norms=None,
                                                                                    random_state=np.random.RandomState(),
                                                                                    n_centroids=self.n_clusters,
                                                                                    init='k-means++')
         self.labels_ = euclidean_distances(X, self.cluster_centers_).argmin(axis=1)
-        # ==============
-        self.fair_clustering_train(X, rows_amount)
+
+    def fit(self, X, bias_vector):
+        # TODO: check if data is standarized and alert in case is clearly not
+        # TODO: work with X as pandas dataframe
+        rows_amount, _ = X.shape
+        self.V_list = [np.array(bias_vector == j) for j in np.unique(bias_vector)]
+        V_sum = [x.sum() for x in self.V_list]
+
+        self.dataset_balance = min(V_sum) / max(V_sum)
+        self.proportion_bias_variable = [x / rows_amount for x in V_sum]
+
+        for fair_lambda_power in self.fair_lambda_powers:
+            for _ in range(self.n_init):
+                self.reset_centers(X)
+                self.fair_clustering_train(X, rows_amount, fair_lambda_power)
 
     def fit_transform(self, X, bias_vector):
         self.fit(X, bias_vector)
@@ -109,9 +107,15 @@ class FairKmeans:
     def fit_predict(self, X, bias_vector):
         return self.fit_transform(X, bias_vector)
 
-    def fair_clustering_train(self, X, rows_dimensions):
-        old_fair_clustering_energy = None
+    def set_cluster_centers(self, cluster_centers):  # TODO: think a way to not create confusion between self.cluster_center from fit and directly set
+        self.cluster_centers_ = cluster_centers
 
+    def predict(self, X):
+        return euclidean_distances(X, self.cluster_centers_).argmin(axis=1)
+
+    def fair_clustering_train(self, X, rows_dimensions, fair_lambda_power):
+        old_fair_clustering_energy = None
+        fairness_error = None
         for it in range(self.max_iter):
             if it == 0:
                 centers_stacked = self.cluster_centers_
@@ -121,6 +125,8 @@ class FairKmeans:
                 tmp_list = [np.where(self.labels_ == k)[0] for k in range(self.n_clusters)]
                 self.cluster_centers_ = [X[tmp, :].mean(axis=0) for tmp in tmp_list]  # updating cluster centers
                 centers_stacked = np.asarray(np.vstack(self.cluster_centers_))
+                if fairness_error is not None:
+                    self.collection_of_fairness_errors.append({"fairness_error": fairness_error, "centers": centers_stacked})
                 square_distances = euclidean_distances(X, centers_stacked, squared=True)
                 a_p = square_distances.copy()
 
@@ -129,19 +135,19 @@ class FairKmeans:
                 print("ERROR: is not implemented yet!")
                 exit(-1)
 
-            self.labels_, S, bound_E = self.bound_update(a_p)
+            self.labels_, S, bound_E = self.bound_update(a_p, fair_lambda_power)
             fairness_error = get_fair_accuracy_proportional(self.proportion_bias_variable, self.V_list, self.labels_, rows_dimensions, self.n_clusters)
-            self.fairness_errors.append(fairness_error)
+            if math.isnan(fairness_error):
+                print("try a smaller lambda")
+                return None
 
-            current_clustering_energy, clusterE, fairE, clusterE_discrete = self.compute_energy_fair_clustering(X, centers_stacked, self.labels_, S)
-            self.E_org.append(current_clustering_energy)
-            self.E_cluster.append(clusterE)
-            self.E_fair.append(fairE)
-            self.E_cluster_discrete.append(clusterE_discrete)
+            current_clustering_energy, clusterE, fairE, clusterE_discrete = self.compute_energy_fair_clustering(X, centers_stacked, self.labels_, S, fair_lambda_power)
 
-            if (len(np.unique(self.labels_)) != self.n_clusters) or math.isnan(fairness_error):
+            if len(np.unique(self.labels_)) != self.n_clusters:
                 print("Try a smaller lambda!!")  # TODO Raise an exception
-                exit(-1)
+                return None
+
+            # report data
 
             if old_fair_clustering_energy is not None:
                 if abs(current_clustering_energy - old_fair_clustering_energy) <= 1e-4 * abs(old_fair_clustering_energy):
@@ -151,7 +157,7 @@ class FairKmeans:
         else:
             print("max iters passed, not converged to a final answer")
 
-    def bound_update(self, a_p): # TODO: check why a_p is so diff with paper one
+    def bound_update(self, a_p, fair_lambda_power):
         old_bound_energy = float('inf')
         J = len(self.proportion_bias_variable)
         S = normalize_2(np.exp((-a_p)))
@@ -164,10 +170,10 @@ class FairKmeans:
 
             b_j_list = compute_b_j_parallel(J, S, self.V_list, self.proportion_bias_variable)
             b_j_list = sum(b_j_list)
-            fair_lambda = self.fair_lambda
+            fair_lambda_power = fair_lambda_power
             lipchitz_value = self.lipchitz_value
 
-            b_term = ne.evaluate('fair_lambda * b_j_list')
+            b_term = ne.evaluate('fair_lambda_power * b_j_list')
             terms = ne.evaluate('(terms - b_term)/lipchitz_value')
             S_in_2 = normalize(terms)
             S = ne.evaluate('S_in * S_in_2')
@@ -185,7 +191,7 @@ class FairKmeans:
         labels = np.argmax(S, axis=1)
         return labels, S, report_energy
 
-    def compute_energy_fair_clustering(self, X, C, labels, S):
+    def compute_energy_fair_clustering(self, X, C, labels, S, fair_lambda_power):
         print('compute energy')
         J = len(self.proportion_bias_variable)
         N, K = S.shape
@@ -197,7 +203,7 @@ class FairKmeans:
 
         # Fairness term
         fairness_E = [fairness_term_V_j(self.proportion_bias_variable[j], S, self.V_list[j]) for j in range(J)]
-        fairness_E = (self.fair_lambda * sum(fairness_E)).sum()
+        fairness_E = (fair_lambda_power * sum(fairness_E)).sum()
 
         energy_fair_clustering = clustering_E + fairness_E
 
