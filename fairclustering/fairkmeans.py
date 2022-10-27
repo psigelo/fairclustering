@@ -151,7 +151,6 @@ class FairKmeans:
 
             if old_fair_clustering_energy is not None:
                 if abs(current_clustering_energy - old_fair_clustering_energy) <= 1e-4 * abs(old_fair_clustering_energy):
-                    print('......Job  done......')
                     break
             old_fair_clustering_energy = current_clustering_energy
         else:
@@ -183,7 +182,6 @@ class FairKmeans:
             report_energy = energy_bound
 
             if i > 1 and (abs(energy_bound - old_bound_energy) <= 1e-5 * abs(old_bound_energy)):
-                print('Converged')
                 break
             else:
                 old_bound_energy = energy_bound
@@ -192,7 +190,6 @@ class FairKmeans:
         return labels, S, report_energy
 
     def compute_energy_fair_clustering(self, X, C, labels, S, fair_lambda_power):
-        print('compute energy')
         J = len(self.proportion_bias_variable)
         N, K = S.shape
 
