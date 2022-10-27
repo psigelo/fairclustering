@@ -30,6 +30,8 @@ def get_fair_accuracy(u_V, V_list, l, N, K):
 # TODO: change variable names and comment
 def get_fair_accuracy_proportional(u_V, V_list, l, N, K):
     V_j_list = np.array([get_V_jl(x, l, N, K) for x in V_list])
+    if sum(V_j_list).min() == 0:
+        return np.NAN
     clustered_uV = V_j_list / sum(V_j_list)
     fairness_error = np.zeros(K)
     u_V = np.array(u_V)
@@ -43,6 +45,6 @@ def normalize_data(X):
     """
     L2 normalize
     """
-    feanorm = np.maximum(1e-14,np.sum(X**2,axis=1))
-    X_out = X/(feanorm[:,None]**0.5)
+    feanorm = np.maximum(1e-14, np.sum(X**2, axis=1))
+    X_out = X/(feanorm[:, None]**0.5)
     return X_out
