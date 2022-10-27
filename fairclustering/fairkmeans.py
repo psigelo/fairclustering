@@ -139,14 +139,12 @@ class FairKmeans:
             self.labels_, S, bound_E = self.bound_update(a_p, fair_lambda_power)
             fairness_error = get_fair_accuracy_proportional(self.proportion_bias_variable, self.V_list, self.labels_, rows_dimensions, self.n_clusters)
             if math.isnan(fairness_error):
-                print("try a smaller lambda")
-                return None
+                return None  # TODO check if better Raise an exception
 
             current_clustering_energy, clusterE, fairE, clusterE_discrete = self.compute_energy_fair_clustering(X, centers_stacked, self.labels_, S, fair_lambda_power)
 
             if len(np.unique(self.labels_)) != self.n_clusters:
-                print("Try a smaller lambda!!")  # TODO Raise an exception
-                return None
+                return None  # TODO check if better Raise an exception
 
             # report data
 
