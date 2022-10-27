@@ -4,3 +4,4 @@ numpy
 tables
 numexpr
 numba
+tqdm

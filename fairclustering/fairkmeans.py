@@ -6,6 +6,7 @@ from sklearn.metrics.pairwise import euclidean_distances
 import numexpr as ne
 from numba import jit  # ToDo: check optimization
 from utils.metrics import get_fair_accuracy_proportional
+from tqdm import tqdm
 
 
 def normalize(S_in):
@@ -63,7 +64,6 @@ def fairness_term_V_j(u_j, S, V_j):
 
 class FairKmeans:
     def __init__(self, n_clusters, n_init=25, fair_lambda_powers=None, lipchitz_value=2.0, max_iter=100, bound_iterations=10000):
-
         self.fair_lambda_powers = fair_lambda_powers if fair_lambda_powers is not None else [10, 50, 100, 200]
         self.labels_ = None
         self.dataset_balance = None
@@ -94,11 +94,12 @@ class FairKmeans:
 
         self.dataset_balance = min(V_sum) / max(V_sum)
         self.proportion_bias_variable = [x / rows_amount for x in V_sum]
-
-        for fair_lambda_power in self.fair_lambda_powers:
-            for _ in range(self.n_init):
-                self.reset_centers(X)
-                self.fair_clustering_train(X, rows_amount, fair_lambda_power)
+        with tqdm(total=self.n_init * len(self.fair_lambda_powers), desc="Complete fair kmeans:") as pbar:
+            for fair_lambda_power in self.fair_lambda_powers:
+                for _ in range(self.n_init):
+                    self.reset_centers(X)
+                    self.fair_clustering_train(X, rows_amount, fair_lambda_power)
+                    pbar.update(1)
 
     def fit_transform(self, X, bias_vector):
         self.fit(X, bias_vector)
